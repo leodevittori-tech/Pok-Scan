@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#111318" />
+  <title>PokéScan • Scanner Carte Pokémon</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root{
+      --bg:#0d0f14;--card:#171a22;--card2:#1d2130;--text:#f5f7fb;--muted:#a8afbf;
+      --accent:#ffd43b;--accent2:#5ea4ff;--good:#55d88b;--warn:#ffbe55;--bad:#ff6b6b;
+      --line:#2a3040;--shadow:0 18px 50px rgba(0,0,0,.35)
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;background:
+      radial-gradient(circle at 15% 0%,rgba(94,164,255,.13),transparent 25rem),
+      radial-gradient(circle at 90% 10%,rgba(255,212,59,.12),transparent 24rem),var(--bg);
+      color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      min-height:100vh
+    }
+    .wrap{width:min(1100px,calc(100% - 28px));margin:auto;padding:28px 0 64px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}
+    .brand{display:flex;align-items:center;gap:13px}
+    .logo{width:54px;height:54px;border-radius:17px;background:linear-gradient(145deg,#ffdc4d,#ff9f2e);
+      display:grid;place-items:center;box-shadow:0 10px 30px rgba(255,190,50,.25);font-size:29px}
+    h1{font-size:clamp(25px,5vw,38px);margin:0;letter-spacing:-.04em}
+    .sub{color:var(--muted);margin:4px 0 0;font-size:14px}
+    .pill{font-size:12px;background:#202635;border:1px solid var(--line);padding:8px 11px;border-radius:999px;color:#cfd5e3}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+    .panel{background:linear-gradient(180deg,rgba(255,255,255,.03),transparent),var(--card);
+      border:1px solid var(--line);border-radius:24px;padding:20px;box-shadow:var(--shadow)}
+    .panel h2{font-size:18px;margin:0 0 14px}
+    .drop{
+      min-height:390px;border:1.5px dashed #465069;border-radius:21px;position:relative;overflow:hidden;
+      display:grid;place-items:center;background:#10131a
+    }
+    .drop.has-image{border-style:solid}
+    .placeholder{text-align:center;padding:34px;max-width:420px}
+    .placeholder .camera{font-size:58px}
+    .placeholder strong{display:block;font-size:21px;margin:10px 0 7px}
+    .placeholder span{color:var(--muted);line-height:1.45;font-size:14px}
+    #preview{display:none;width:100%;height:100%;max-height:520px;object-fit:contain;background:#0a0c10}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    button,.button{
+      appearance:none;border:0;border-radius:14px;padding:12px 15px;font-weight:800;cursor:pointer;
+      font-size:14px;transition:.18s transform,.18s opacity;text-decoration:none;display:inline-flex;align-items:center;gap:7px
+    }
+    button:active,.button:active{transform:scale(.98)}
+    .primary{background:var(--accent);color:#17130a}
+    .secondary{background:#252b39;color:#f8f9fb;border:1px solid #343c4f}
+    .ghost{background:transparent;border:1px solid #343c4f;color:#d9deea}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    input[type=file]{display:none}
+    .status{margin-top:14px;padding:12px 14px;border-radius:14px;background:#11151d;border:1px solid var(--line);color:#c8cfdd;font-size:13px;display:none}
+    .progress{height:7px;background:#262c3a;border-radius:99px;overflow:hidden;margin-top:9px}
+    .progress>i{display:block;width:0;height:100%;background:linear-gradient(90deg,var(--accent2),var(--accent));transition:.25s}
+    .result-empty{min-height:390px;display:grid;place-items:center;color:#8e96a9;text-align:center;padding:30px}
+    .result{display:none}
+    .cardtop{display:grid;grid-template-columns:150px 1fr;gap:18px;align-items:start}
+    .official{width:100%;border-radius:12px;box-shadow:0 14px 30px rgba(0,0,0,.35);background:#111}
+    .name{font-size:26px;font-weight:900;letter-spacing:-.03em;margin:0 0 3px}
+    .set{color:var(--muted);font-size:14px}
+    .badges{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+    .badge{font-size:12px;font-weight:800;padding:7px 9px;border-radius:999px;background:#242a38;border:1px solid #343c4f}
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:17px}
+    .stat{background:var(--card2);border:1px solid #2b3243;border-radius:16px;padding:13px}
+    .stat small{display:block;color:var(--muted);margin-bottom:5px}
+    .stat strong{font-size:18px}
+    .auth{margin-top:15px;padding:14px;border-radius:16px;border:1px solid var(--line);background:#12161f}
+    .authline{display:flex;justify-content:space-between;gap:12px;align-items:center}
+    .meter{height:9px;border-radius:99px;background:#2b3040;overflow:hidden;margin-top:9px}
+    .meter span{display:block;height:100%;width:0;background:var(--warn);transition:.3s}
+    .notice{font-size:12px;color:#929bad;line-height:1.45;margin-top:9px}
+    .alternatives{margin-top:18px}
+    .alts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .alt{background:#12161e;border:1px solid var(--line);padding:9px;border-radius:14px;cursor:pointer}
+    .alt img{width:100%;aspect-ratio:0.716;object-fit:cover;border-radius:8px}
+    .alt b{display:block;font-size:12px;margin-top:7px}
+    .alt small{color:var(--muted)}
+    .ocrbox{margin-top:16px}
+    details{background:#11151d;border:1px solid var(--line);border-radius:15px;padding:12px 14px}
+    summary{cursor:pointer;font-weight:700;color:#cbd2df}
+    pre{white-space:pre-wrap;color:#aab3c3;font-size:11px;max-height:170px;overflow:auto}
+    .manual{margin-top:14px;display:flex;gap:8px}
+    .manual input{flex:1;background:#11151c;color:#fff;border:1px solid #343b4b;border-radius:13px;padding:12px;outline:none}
+    footer{color:#7f8798;text-align:center;font-size:12px;margin-top:24px;line-height:1.6}
+    .err{color:#ff8b8b}
+    @media (max-width:780px){
+      .grid{grid-template-columns:1fr}.drop{min-height:330px}.cardtop{grid-template-columns:118px 1fr}
+      .stats{grid-template-columns:1fr 1fr}.alts{grid-template-columns:repeat(3,1fr)}.pill{display:none}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">⚡</div>
+      <div><h1>PokéScan</h1><p class="sub">Scanner e valutatore di carte Pokémon</p></div>
+    </div>
+    <div class="pill">GitHub Pages ready</div>
+  </header>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>1. Scansiona la carta</h2>
+      <div class="drop" id="drop">
+        <div class="placeholder" id="placeholder">
+          <div class="camera">📷</div>
+          <strong>Fotografa la carta</strong>
+          <span>Mettila dritta, ben illuminata e fai vedere bene nome e numero della carta.</span>
+        </div>
+        <img id="preview" alt="Anteprima carta">
+      </div>
+
+      <div class="actions">
+        <label class="button primary" for="cameraInput">📸 Usa fotocamera</label>
+        <label class="button secondary" for="fileInput">🖼️ Scegli foto</label>
+        <button class="ghost" id="scanBtn" disabled>🔎 Analizza</button>
+      </div>
+      <input id="cameraInput" type="file" accept="image/*" capture="environment">
+      <input id="fileInput" type="file" accept="image/*">
+
+      <div class="manual">
+        <input id="manualName" autocomplete="off" placeholder="Oppure scrivi: Charizard 4/102">
+        <button class="secondary" id="manualBtn">Cerca</button>
+      </div>
+
+      <div class="status" id="status">
+        <div id="statusText">Analisi...</div>
+        <div class="progress"><i id="progressBar"></i></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>2. Risultato</h2>
+      <div class="result-empty" id="empty">
+        <div><div style="font-size:48px">🃏</div><strong>Qui apparirà la carta</strong><br><span style="font-size:13px">con rarità, prezzo indicativo e controllo visivo.</span></div>
+      </div>
+
+      <div class="result" id="result">
+        <div class="cardtop">
+          <img class="official" id="officialImg" alt="Carta ufficiale">
+          <div>
+            <div class="name" id="cardName">—</div>
+            <div class="set" id="cardSet">—</div>
+            <div class="badges">
+              <span class="badge" id="rarity">Rarità: —</span>
+              <span class="badge" id="number">N° —</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><small>Prezzo indicativo</small><strong id="price">—</strong></div>
+          <div class="stat"><small>Prezzo minimo</small><strong id="lowPrice">—</strong></div>
+          <div class="stat"><small>Aggiornato</small><strong id="updated">—</strong></div>
+        </div>
+
+        <div class="auth">
+          <div class="authline">
+            <div><b>Controllo autenticità</b><div class="notice" id="authReason">Confronto con i dati ufficiali.</div></div>
+            <b id="authLabel">—</b>
+          </div>
+          <div class="meter"><span id="authMeter"></span></div>
+          <div class="notice">⚠️ È solo un controllo indicativo da foto. Non può certificare che una carta sia autentica.</div>
+        </div>
+
+        <div class="alternatives" id="alternativeWrap" style="display:none">
+          <b>Potrebbe essere anche:</b>
+          <div class="alts" id="alts"></div>
+        </div>
+
+        <div class="ocrbox">
+          <details>
+            <summary>Testo letto dalla foto</summary>
+            <pre id="ocrText">—</pre>
+          </details>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    Prezzi indicativi: possono cambiare e dipendono da lingua, edizione, variante e condizioni della carta.<br>
+    PokéScan non è affiliato a The Pokémon Company, TCGplayer o Cardmarket.
+  </footer>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let selectedFile = null;
+let previewUrl = null;
+let currentOCR = "";
+let lastCandidates = [];
+
+const els = {
+  camera: $("#cameraInput"), file: $("#fileInput"), preview: $("#preview"),
+  placeholder: $("#placeholder"), drop: $("#drop"), scan: $("#scanBtn"),
+  status: $("#status"), statusText: $("#statusText"), progress: $("#progressBar"),
+  empty: $("#empty"), result: $("#result"), official: $("#officialImg"),
+  name: $("#cardName"), set: $("#cardSet"), rarity: $("#rarity"), number: $("#number"),
+  price: $("#price"), low: $("#lowPrice"), updated: $("#updated"),
+  authLabel: $("#authLabel"), authMeter: $("#authMeter"), authReason: $("#authReason"),
+  ocr: $("#ocrText"), alts: $("#alts"), altWrap: $("#alternativeWrap"),
+  manualName: $("#manualName"), manualBtn: $("#manualBtn")
+};
+
+function setStatus(text, pct=0, isError=false){
+  els.status.style.display="block";
+  els.statusText.textContent=text;
+  els.statusText.className=isError?"err":"";
+  els.progress.style.width=Math.max(0,Math.min(100,pct))+"%";
+}
+function loadFile(file){
+  if(!file) return;
+  selectedFile=file;
+  if(previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl=URL.createObjectURL(file);
+  els.preview.src=previewUrl; els.preview.style.display="block";
+  els.placeholder.style.display="none"; els.drop.classList.add("has-image");
+  els.scan.disabled=false;
+}
+els.camera.addEventListener("change",e=>loadFile(e.target.files[0]));
+els.file.addEventListener("change",e=>loadFile(e.target.files[0]));
+
+function cleanOCR(text){
+  return text.replace(/[|]/g,"I").replace(/\s+/g," ").trim();
+}
+function parseHints(text){
+  const raw=cleanOCR(text);
+  const lines=text.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+  const reject=/^(basic|stage|trainer|energy|pokemon|pokémon|illus|weakness|resistance|retreat|ability|hp\s*\d*)$/i;
+  let names=lines
+    .map(x=>x.replace(/[^\p{L}\p{N}\-.' ]/gu," ").replace(/\s+/g," ").trim())
+    .filter(x=>x.length>=3 && x.length<=32 && !reject.test(x) && !/\d{2,}/.test(x));
+  const numberMatch=raw.match(/(?:\b|\s)(\d{1,3})\s*\/\s*(\d{1,3})(?:\b|\s)/);
+  const hpMatch=raw.match(/\bHP\s*(\d{2,3})\b/i);
+  return { raw, names:[...new Set(names)].slice(0,8), number:numberMatch?numberMatch[1]:null, total:numberMatch?numberMatch[2]:null, hp:hpMatch?hpMatch[1]:null };
+}
+
+async function apiSearchByName(name, number=null){
+  let q=`name:"${name.replace(/"/g,"")}"`;
+  if(number) q+=` number:${number}`;
+  const url=`https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=12`;
+  const r=await fetch(url);
+  if(!r.ok) throw new Error("Database non raggiungibile ("+r.status+")");
+  const j=await r.json();
+  return j.data||[];
+}
+async function broadSearch(term){
+  const safe=term.replace(/[^\p{L}\p{N}\-.' ]/gu," ").trim();
+  if(!safe) return [];
+  const first=safe.split(/\s+/).slice(0,3).join(" ");
+  let q=`name:${first.replace(/\s+/g,"* ")}*`;
+  const url=`https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(q)}&pageSize=20`;
+  const r=await fetch(url);
+  if(!r.ok) return [];
+  const j=await r.json();
+  return j.data||[];
+}
+
+function scoreCard(card,hints){
+  let s=0;
+  const all=(hints.raw||"").toLowerCase();
+  const nm=(card.name||"").toLowerCase();
+  if(all.includes(nm)) s+=55;
+  const nameWords=nm.split(/\s+/);
+  for(const w of nameWords) if(w.length>2 && all.includes(w)) s+=8;
+  if(hints.number && String(card.number)===String(hints.number)) s+=28;
+  if(hints.total && card.set && String(card.set.printedTotal)===String(hints.total)) s+=15;
+  if(hints.hp && card.hp && String(card.hp)===String(hints.hp)) s+=10;
+  return s;
+}
+function pickPrice(card){
+  const cm=card.cardmarket?.prices;
+  if(cm){
+    const market=cm.trendPrice ?? cm.averageSellPrice ?? cm.avg7 ?? cm.avg30 ?? null;
+    const low=cm.lowPriceExPlus ?? cm.lowPrice ?? null;
+    return {market,low,currency:"€",updated:card.cardmarket.updatedAt||"—"};
+  }
+  const prices=card.tcgplayer?.prices||{};
+  const variants=Object.values(prices);
+  if(variants.length){
+    const p=variants.find(v=>v.market!=null)||variants[0];
+    return {market:p.market??p.mid??p.low??null,low:p.low??null,currency:"$",updated:card.tcgplayer.updatedAt||"—"};
+  }
+  return {market:null,low:null,currency:"",updated:"—"};
+}
+function money(v,c){
+  return v==null?"N/D":`${c}${Number(v).toFixed(2)}`;
+}
+function rarityLevel(rarity=""){
+  const r=rarity.toLowerCase();
+  if(/hyper|secret|illustration rare|special illustration|ultra rare|rainbow|shiny|gold/.test(r)) return "Molto rara";
+  if(/rare holo|double rare|rare/.test(r)) return "Rara";
+  if(/uncommon/.test(r)) return "Non comune";
+  if(/common/.test(r)) return "Comune";
+  return rarity || "Non indicata";
+}
+function showCard(card,hints,rankScore=0){
+  const p=pickPrice(card);
+  els.empty.style.display="none"; els.result.style.display="block";
+  els.official.src=card.images?.small||card.images?.large||"";
+  els.name.textContent=card.name||"Carta";
+  els.set.textContent=`${card.set?.name||"Set sconosciuto"} • ${card.set?.series||""}`.replace(/ • $/,"");
+  els.rarity.textContent=`${rarityLevel(card.rarity)}${card.rarity ? " · "+card.rarity : ""}`;
+  els.number.textContent=`N° ${card.number||"—"}/${card.set?.printedTotal||"—"}`;
+  els.price.textContent=money(p.market,p.currency);
+  els.low.textContent=money(p.low,p.currency);
+  els.updated.textContent=p.updated||"—";
+  els.ocr.textContent=currentOCR||"Ricerca manuale";
+
+  let confidence=Math.max(20,Math.min(96,rankScore));
+  let label="Da controllare", reason="La foto coincide solo in parte con i dati trovati.";
+  if(rankScore>=78){ label="Probabilmente autentica"; reason="Nome, numero e altri dettagli letti coincidono bene con la carta ufficiale."; }
+  else if(rankScore>=52){ label="Compatibile"; reason="Diversi dettagli coincidono, ma servono foto più nitide o del retro."; }
+  else if(currentOCR){ label="Risultato incerto"; reason="Il riconoscimento della foto non è abbastanza preciso per valutare l'autenticità."; }
+  else { confidence=45; label="Non verificata"; reason="La ricerca manuale identifica la carta, ma non permette controlli sulla foto."; }
+  els.authLabel.textContent=label;
+  els.authMeter.style.width=confidence+"%";
+  els.authMeter.style.background=confidence>=78?"var(--good)":confidence>=52?"var(--warn)":"var(--bad)";
+  els.authReason.textContent=reason;
+}
+
+function showAlternatives(cards,hints){
+  els.alts.innerHTML="";
+  const list=cards.slice(1,4);
+  els.altWrap.style.display=list.length?"block":"none";
+  list.forEach(card=>{
+    const d=document.createElement("div"); d.className="alt";
+    d.innerHTML=`<img src="${card.images?.small||""}" alt=""><b>${card.name}</b><small>${card.set?.name||""} · #${card.number}</small>`;
+    d.onclick=()=>{
+      showCard(card,hints,scoreCard(card,hints));
+      [...els.alts.children].forEach(x=>x.style.outline="none");
+      d.style.outline="2px solid var(--accent)";
+    };
+    els.alts.appendChild(d);
+  });
+}
+
+async function findCandidates(hints){
+  let cards=[];
+  const tried=new Set();
+  for(const name of hints.names.slice(0,5)){
+    const normalized=name.replace(/\b(VSTAR|VMAX|V|ex|EX|GX)\b.*$/i,m=>m).trim();
+    if(normalized.length<3||tried.has(normalized.toLowerCase())) continue;
+    tried.add(normalized.toLowerCase());
+    try{
+      const exact=await apiSearchByName(normalized,hints.number);
+      cards.push(...exact);
+      if(cards.length>=8) break;
+      if(!exact.length){
+        const looser=await apiSearchByName(normalized,null);
+        cards.push(...looser);
+      }
+    }catch(e){}
+  }
+  const unique=new Map(cards.map(c=>[c.id,c]));
+  return [...unique.values()].sort((a,b)=>scoreCard(b,hints)-scoreCard(a,hints));
+}
+
+async function scan(){
+  if(!selectedFile) return;
+  els.scan.disabled=true;
+  els.result.style.display="none"; els.empty.style.display="grid";
+  setStatus("Avvio riconoscimento testo…",5);
+  try{
+    const worker=await Tesseract.createWorker("eng",1,{
+      logger:m=>{
+        if(m.status==="recognizing text"){
+          const pct=10+Math.round((m.progress||0)*60);
+          setStatus(`Leggo la carta… ${Math.round((m.progress||0)*100)}%`,pct);
+        }
+      }
+    });
+    const ret=await worker.recognize(selectedFile);
+    await worker.terminate();
+    currentOCR=ret.data.text||"";
+    const hints=parseHints(currentOCR);
+    setStatus("Cerco la carta nel database…",76);
+    let cards=await findCandidates(hints);
+
+    if(!cards.length && hints.names.length){
+      cards=await broadSearch(hints.names[0]);
+      cards.sort((a,b)=>scoreCard(b,hints)-scoreCard(a,hints));
+    }
+    if(!cards.length) throw new Error("Non sono riuscito a identificare la carta. Prova con una foto più dritta oppure scrivi il nome sotto.");
+
+    lastCandidates=cards;
+    const best=cards[0];
+    const score=scoreCard(best,hints);
+    showCard(best,hints,score);
+    showAlternatives(cards,hints);
+    setStatus("Analisi completata ✓",100);
+  }catch(err){
+    console.error(err);
+    setStatus(err.message||"Errore durante l'analisi.",100,true);
+  }finally{
+    els.scan.disabled=false;
+  }
+}
+els.scan.addEventListener("click",scan);
+
+async function manualSearch(){
+  const text=els.manualName.value.trim();
+  if(!text) return;
+  currentOCR="";
+  setStatus("Cerco la carta…",35);
+  els.manualBtn.disabled=true;
+  try{
+    const num=(text.match(/(\d{1,3})\s*\/\s*(\d{1,3})/)||[])[1]||null;
+    const name=text.replace(/\d{1,3}\s*\/\s*\d{1,3}/,"").trim();
+    let cards=await apiSearchByName(name,num);
+    if(!cards.length) cards=await apiSearchByName(name,null);
+    if(!cards.length) throw new Error("Nessuna carta trovata. Controlla il nome.");
+    const hints={raw:text,names:[name],number:num,total:null,hp:null};
+    cards.sort((a,b)=>scoreCard(b,hints)-scoreCard(a,hints));
+    showCard(cards[0],hints,0);
+    showAlternatives(cards,hints);
+    setStatus("Carta trovata ✓",100);
+  }catch(e){ setStatus(e.message||"Errore di ricerca",100,true); }
+  finally{ els.manualBtn.disabled=false; }
+}
+els.manualBtn.addEventListener("click",manualSearch);
+els.manualName.addEventListener("keydown",e=>{if(e.key==="Enter")manualSearch()});
+
+// Drag & drop desktop
+["dragenter","dragover"].forEach(ev=>els.drop.addEventListener(ev,e=>{e.preventDefault();els.drop.style.borderColor="var(--accent)"}));
+["dragleave","drop"].forEach(ev=>els.drop.addEventListener(ev,e=>{e.preventDefault();els.drop.style.borderColor=""}));
+els.drop.addEventListener("drop",e=>loadFile(e.dataTransfer.files[0]));
+</script>
+</body>
+</html>
